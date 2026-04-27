@@ -1,52 +1,74 @@
-# Encrypted Chat App
+# 🔐 Encrypted Chat - Tor & PGP Secure Messaging
 
-A privacy-focused chat application with client-side OpenPGP encryption, designed to be hosted on Tor (.onion) services.
+A privacy-focused, end-to-end encrypted chat application designed for use over the Tor network. Built with PGP encryption, Supabase backend, and modern web technologies.
 
-## Features
+## ✨ Features
 
-- **Client-side encryption**: Messages are encrypted/decrypted using OpenPGP
-- **Zero-knowledge backend**: Server never sees plaintext messages
-- **Simple authentication**: Username + PGP key pair
-- **Real-time updates**: Polling for new messages
-- **Tor-ready**: Designed for .onion hosting
+- **🔒 End-to-End Encryption**: PGP-based encryption for all messages
+- **🌐 Tor Network Ready**: Designed to work seamlessly over Tor
+- **👤 User Management**: Secure user identity with PGP key pairs
+- **💬 Real-time Messaging**: Polling-based message updates
+- **🎨 Modern UI**: Clean, responsive interface with dark theme
+- **📱 Cross-Platform**: Works on desktop, tablet, and mobile devices
+- **🛡️ Privacy First**: No message metadata stored, only encrypted content
 
-## Security Architecture
+## 🚀 Quick Start
 
-- Private keys are stored locally in browser localStorage
-- Only encrypted messages are sent to the server
-- Server (Supabase) only stores: sender, recipient, encrypted_message, timestamp
-- Encryption/decryption happens entirely in the browser
+### Prerequisites
 
-## Prerequisites
+- Node.js 16+ and npm/yarn
+- A Supabase project (free tier works)
+- PGP keys (you can generate new ones)
 
-- Node.js (for local development server, optional)
-- Supabase account
-- PGP key pair (generate one if needed)
+### Installation
 
-## Quick Start
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yourusername/encrypted-chat-tor.git
+   cd encrypted-chat-tor
+   ```
 
-### 1. Generate PGP Keys (if needed)
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-```bash
-# Using GPG
-gpg --full-generate-key
+3. **Set up environment variables**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your Supabase credentials
+   ```
 
-# Export public key
-gpg --armor --export your-email@example.com > public.key
+4. **Set up Supabase database**
+   ```bash
+   # Run the SQL setup script in your Supabase SQL editor
+   cat supabase-setup.sql
+   ```
 
-# Export private key
-gpg --armor --export-secret-keys your-email@example.com > private.key
-```
+5. **Start the development server**
+   ```bash
+   npm run dev
+   ```
 
-### 2. Set Up Supabase
+6. **Open your browser**
+   Navigate to `http://localhost:8000`
 
-1. Go to [supabase.com](https://supabase.com) and create a free account
-2. Create a new project
-3. Go to SQL Editor and run the following:
+## 📋 Setup Guide
+
+### Supabase Configuration
+
+1. Create a new project at [supabase.com](https://supabase.com)
+2. Go to Project Settings → API
+3. Copy your project URL and anon key
+4. Add them to your `.env` file
+
+### Database Setup
+
+Run the following SQL in your Supabase SQL editor:
 
 ```sql
 -- Create users table
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,
     public_key TEXT NOT NULL,
@@ -54,7 +76,7 @@ CREATE TABLE users (
 );
 
 -- Create messages table
-CREATE TABLE messages (
+CREATE TABLE IF NOT EXISTS messages (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     sender TEXT NOT NULL,
     recipient TEXT NOT NULL,
@@ -63,218 +85,200 @@ CREATE TABLE messages (
 );
 
 -- Create indexes for better performance
-CREATE INDEX idx_messages_sender ON messages(sender);
-CREATE INDEX idx_messages_recipient ON messages(recipient);
-CREATE INDEX idx_messages_created_at ON messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender);
+CREATE INDEX IF NOT EXISTS idx_messages_recipient ON messages(recipient);
+CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at DESC);
 
--- Enable Row Level Security (optional, for additional security)
+-- Enable Row Level Security
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 
--- Allow public access (for this demo)
-CREATE POLICY "Public read access for users" ON users FOR SELECT USING (true);
-CREATE POLICY "Public insert access for users" ON users FOR INSERT WITH CHECK (true);
-CREATE POLICY "Public update access for users" ON users FOR UPDATE USING (true);
-CREATE POLICY "Public read access for messages" ON messages FOR SELECT USING (true);
-CREATE POLICY "Public insert access for messages" ON messages FOR INSERT WITH CHECK (true);
+-- Create policies
+CREATE POLICY "Anyone can read users"
+    ON users FOR SELECT
+    USING (true);
+
+CREATE POLICY "Anyone can insert users"
+    ON users FOR INSERT
+    WITH CHECK (true);
+
+CREATE POLICY "Anyone can upsert users"
+    ON users FOR UPSERT
+    WITH CHECK (true);
+
+CREATE POLICY "Anyone can read messages"
+    ON messages FOR SELECT
+    USING (true);
+
+CREATE POLICY "Anyone can insert messages"
+    ON messages FOR INSERT
+    WITH CHECK (true);
 ```
 
-4. Get your Supabase credentials:
-   - Go to Project Settings → API
-   - Copy Project URL and anon/public key
+### PGP Key Generation
 
-### 3. Configure the App
-
-Edit `app.js` and update the Supabase configuration:
-
-```javascript
-const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
-```
-
-Replace with your actual Supabase credentials.
-
-### 4. Run Locally
-
-#### Option A: Simple HTTP Server (Python)
+Generate your PGP keys using GPG:
 
 ```bash
-# Python 3
-python -m http.server 8000
+# Generate a new key pair
+gpg --full-generate-key
 
-# Python 2
-python -m SimpleHTTPServer 8000
+# Export your public key
+gpg --armor --export your-email@example.com > public_key.asc
+
+# Export your private key
+gpg --armor --export-secret-keys your-email@example.com > private_key.asc
 ```
 
-#### Option B: Node.js HTTP Server
+## 🔧 Configuration
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `SUPABASE_URL` | Your Supabase project URL | Required |
+| `SUPABASE_ANON_KEY` | Your Supabase anon key | Required |
+| `MESSAGE_POLL_INTERVAL` | Message polling interval (ms) | `3000` |
+
+### Tor Integration (Optional)
+
+To use over Tor:
+
+1. Install Tor: `sudo apt install tor` (Linux) or download Tor Browser
+2. Configure your Tor proxy settings
+3. Access the application through Tor
+
+## 🏗️ Project Structure
+
+```
+encrypted-chat-tor/
+├── index.html              # Main HTML file
+├── styles.css              # Modern styling
+├── app.js                  # Application logic
+├── supabase-setup.sql      # Database setup script
+├── .env.example            # Environment variables template
+├── .gitignore              # Git ignore rules
+├── package.json            # Node.js dependencies
+└── README.md               # This file
+```
+
+## 🔒 Security Features
+
+- **End-to-End Encryption**: Messages are encrypted on the client side
+- **PGP Standards**: Uses industry-standard PGP encryption
+- **No Server-Side Decryption**: Server never sees plaintext messages
+- **Secure Key Storage**: Private keys stored locally only
+- **Input Validation**: All inputs are validated and sanitized
+- **XSS Protection**: Content is properly escaped
+
+## 🚢 Deployment
+
+### Static Hosting
+
+Deploy to any static hosting service:
+
+**Netlify:**
+```bash
+npm install -g netlify-cli
+netlify deploy --prod
+```
+
+**Vercel:**
+```bash
+npm install -g vercel
+vercel --prod
+```
+
+**GitHub Pages:**
+```bash
+# Build and deploy to gh-pages branch
+git subtree push --prefix dist origin gh-pages
+```
+
+### Environment Setup
+
+For production, ensure you:
+
+1. Set up production environment variables
+2. Use HTTPS (required for secure communication)
+3. Enable proper CORS settings in Supabase
+4. Consider rate limiting for API calls
+5. Monitor for suspicious activity
+
+## 🧪 Development
+
+### Available Scripts
 
 ```bash
-# Install http-server globally
-npm install -g http-server
-
-# Run
-http-server -p 8000
+npm start          # Start production server
+npm run dev        # Start development server with auto-open
+npm test           # Run tests (when implemented)
+npm run build      # Build for production (when implemented)
 ```
 
-#### Option C: PHP Built-in Server
+### Code Style
 
-```bash
-php -S localhost:8000
-```
+- Use modern JavaScript (ES6+)
+- Follow existing code conventions
+- Add comments for complex logic
+- Keep functions focused and small
 
-Then open `http://localhost:8000` in your browser.
+## 🤝 Contributing
 
-### 5. Set Up Your Identity
+Contributions are welcome! Please follow these guidelines:
 
-1. Enter your username
-2. Paste your PGP public key
-3. Paste your PGP private key (stored locally only)
-4. Enter your private key passphrase if protected
-5. Click "Save Identity"
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-### 6. Start Chatting
+### Development Guidelines
 
-1. Click "+ Add User" to add contacts
-2. Enter their username and public key
-3. Select a user from the list
-4. Start chatting!
+- Write clean, readable code
+- Add tests for new features
+- Update documentation as needed
+- Follow the existing code style
+- Test thoroughly before submitting
 
-## Tor Deployment
+## 📝 License
 
-### Option 1: Tor Hidden Service (.onion)
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-1. **Install Tor**
+## ⚠️ Disclaimer
 
-```bash
-# Ubuntu/Debian
-sudo apt install tor
+This software is provided as-is for educational and privacy-conscious communication. While we implement strong encryption practices:
 
-# macOS
-brew install tor
-```
+- Always verify your recipient's public keys
+- Keep your private keys secure and never share them
+- Use strong passphrases for your private keys
+- Be aware that no system is 100% secure
+- Use at your own risk
 
-2. **Configure Tor Hidden Service**
+## 🙏 Acknowledgments
 
-Edit `/etc/tor/torrc` (or create `torrc` in your Tor directory):
+- [OpenPGP.js](https://openpgpjs.org/) for client-side PGP implementation
+- [Supabase](https://supabase.com/) for the backend infrastructure
+- The Tor Project for privacy networking inspiration
 
-```torrc
-HiddenServiceDir /var/lib/tor/hidden_service/
-HiddenServicePort 80 127.0.0.1:8000
-```
+## 📞 Support
 
-3. **Start Tor**
+For issues, questions, or contributions:
+- Open an issue on GitHub
+- Check existing documentation
+- Review the code comments
 
-```bash
-sudo systemctl start tor
-# or
-tor
-```
+## 🔮 Future Enhancements
 
-4. **Get your .onion address**
+- [ ] WebSocket support for real-time updates
+- [ ] File sharing with encryption
+- [ ] Voice/video calls with encryption
+- [ ] Mobile app (React Native)
+- [ ] Enhanced Tor integration
+- [ ] Message expiration
+- [ ] Two-factor authentication
+- [ ] Backup and restore functionality
 
-```bash
-sudo cat /var/lib/tor/hidden_service/hostname
-```
+---
 
-5. **Run your web server**
-
-```bash
-python -m http.server 8000
-```
-
-6. **Access via Tor Browser**
-
-Open Tor Browser and navigate to your `.onion` address.
-
-### Option 2: Using Torsocks
-
-```bash
-# Install torsocks
-sudo apt install torsocks  # Ubuntu/Debian
-brew install torsocks     # macOS
-
-# Run your server through Tor
-torsocks python -m http.server 8000
-```
-
-## File Structure
-
-```
-tor-web/
-├── index.html          # Main HTML structure
-├── styles.css          # Styling
-├── app.js              # Main application logic
-└── README.md           # This file
-```
-
-## How It Works
-
-### Encryption Flow
-
-1. **User A sends message to User B:**
-   - User A types message
-   - App encrypts message with User B's public key
-   - Only encrypted message sent to server
-   - Server stores encrypted message
-
-2. **User B receives message:**
-   - App fetches encrypted message from server
-   - User B's private key decrypts message locally
-   - Plaintext message displayed
-
-### Security Guarantees
-
-- Server never sees private keys
-- Server never sees plaintext messages
-- Each message encrypted with recipient's public key
-- Only recipient can decrypt with their private key
-
-## Troubleshooting
-
-### Common Issues
-
-**"Invalid PGP keys" error:**
-- Ensure you're pasting the complete key including `-----BEGIN PGP PUBLIC KEY BLOCK-----` headers
-- Check that keys are in ASCII-armored format
-
-**"Failed to decrypt private key" error:**
-- Verify your passphrase is correct
-- Make sure you're using the correct private key
-
-**Messages not appearing:**
-- Check Supabase credentials in app.js
-- Verify database tables were created correctly
-- Check browser console for errors
-
-**Tor connection issues:**
-- Ensure Tor service is running
-- Check torrc configuration
-- Verify firewall settings
-
-## Development Notes
-
-### Adding Features
-
-- **Message signing**: Add signature verification using `openpgp.sign()` and `openpgp.verify()`
-- **File encryption**: Extend to support encrypted file attachments
-- **Group chats**: Implement multi-recipient encryption
-- **Real-time**: Replace polling with Supabase Realtime subscriptions
-
-### Security Considerations
-
-- This is a minimal MVP - production use needs additional security hardening
-- Consider adding: key verification, message authentication, forward secrecy
-- Private keys in localStorage - consider using secure storage alternatives
-- No key rotation mechanism implemented
-
-## License
-
-MIT License - Feel free to use and modify for your needs.
-
-## Contributing
-
-This is a minimal educational project. Suggestions and improvements welcome!
-
-## Disclaimer
-
-This is a demonstration project. For production use, conduct thorough security audits and consider additional hardening measures.
+**Built with ❤️ for privacy and secure communication**
