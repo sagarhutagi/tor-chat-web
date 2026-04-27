@@ -10,22 +10,8 @@ const CONFIG = {
     ENCRYPTION_ALGORITHM: 'PGP'
 };
 
-// Initialize Supabase
-let supabase;
-try {
-    if (!CONFIG.SUPABASE_URL || CONFIG.SUPABASE_URL === 'YOUR_SUPABASE_URL') {
-        throw new Error('Supabase URL not configured. Please update CONFIG.SUPABASE_URL');
-    }
-    if (!CONFIG.SUPABASE_ANON_KEY || CONFIG.SUPABASE_ANON_KEY === 'YOUR_SUPABASE_ANON_KEY') {
-        throw new Error('Supabase anon key not configured. Please update CONFIG.SUPABASE_ANON_KEY');
-    }
-
-    supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
-    console.log('Supabase initialized successfully');
-} catch (error) {
-    console.error('Failed to initialize Supabase:', error.message);
-    showConfigurationError();
-}
+// Supabase client is initialized during app startup after runtime config is loaded.
+let supabaseClient;
 
 // App State
 let currentUser = null;
@@ -59,6 +45,39 @@ const saveUserBtn = document.getElementById('save-user');
 // Initialize app
 function init() {
     try {
+        initializeApp().catch((error) => {
+            console.error('Initialization error:', error);
+            showError('Failed to initialize application. Please refresh the page.');
+        });
+    } catch (error) {
+        console.error('Initialization error:', error);
+        showError('Failed to initialize application. Please refresh the page.');
+    }
+}
+
+async function initializeApp() {
+    // Load runtime configuration first so .env values can override defaults.
+    await loadRuntimeConfig();
+
+    try {
+        // Check if required libraries are loaded
+        if (typeof openpgp === 'undefined') {
+            console.error('OpenPGP library not loaded');
+            showConfigurationError();
+            return;
+        }
+
+        if (!window.supabase) {
+            console.error('Supabase library not loaded');
+            showConfigurationError();
+            return;
+        }
+
+        initializeSupabaseClient();
+
+        console.log('Libraries loaded successfully');
+        console.log('OpenPGP version:', openpgp.version || 'unknown');
+
         loadUserFromStorage();
         if (currentUser) {
             showChatSection();
@@ -69,8 +88,78 @@ function init() {
         }
     } catch (error) {
         console.error('Initialization error:', error);
-        showError('Failed to initialize application. Please refresh the page.');
+        showConfigurationError();
     }
+}
+
+async function loadRuntimeConfig() {
+    try {
+        const response = await fetch('.env', { cache: 'no-store' });
+        if (!response.ok) {
+            return;
+        }
+
+        const envText = await response.text();
+        const env = parseEnvText(envText);
+
+        if (env.SUPABASE_URL) {
+            CONFIG.SUPABASE_URL = env.SUPABASE_URL;
+        }
+
+        if (env.SUPABASE_ANON_KEY) {
+            CONFIG.SUPABASE_ANON_KEY = env.SUPABASE_ANON_KEY;
+        }
+
+        if (env.MESSAGE_POLL_INTERVAL) {
+            const pollInterval = Number.parseInt(env.MESSAGE_POLL_INTERVAL, 10);
+            if (Number.isFinite(pollInterval) && pollInterval > 0) {
+                CONFIG.MESSAGE_POLL_INTERVAL = pollInterval;
+            }
+        }
+    } catch (error) {
+        console.warn('Could not load .env file in browser context:', error);
+    }
+}
+
+function parseEnvText(envText) {
+    const parsed = {};
+    const lines = envText.split(/\r?\n/);
+
+    for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith('#')) {
+            continue;
+        }
+
+        const separatorIndex = line.indexOf('=');
+        if (separatorIndex === -1) {
+            continue;
+        }
+
+        const key = line.substring(0, separatorIndex).trim();
+        const value = line.substring(separatorIndex + 1).trim();
+
+        if (!key) {
+            continue;
+        }
+
+        parsed[key] = value;
+    }
+
+    return parsed;
+}
+
+function initializeSupabaseClient() {
+    if (!CONFIG.SUPABASE_URL || CONFIG.SUPABASE_URL === 'YOUR_SUPABASE_URL') {
+        throw new Error('Supabase URL not configured. Add SUPABASE_URL to .env or app.js');
+    }
+
+    if (!CONFIG.SUPABASE_ANON_KEY || CONFIG.SUPABASE_ANON_KEY === 'YOUR_SUPABASE_ANON_KEY') {
+        throw new Error('Supabase anon key not configured. Add SUPABASE_ANON_KEY to .env or app.js');
+    }
+
+    supabaseClient = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+    console.log('Supabase initialized successfully');
 }
 
 // Load user from localStorage
@@ -139,14 +228,26 @@ function showConfigurationError() {
     errorDiv.className = 'error-message';
     errorDiv.innerHTML = `
         <h2>⚠️ Configuration Required</h2>
-        <p>Please configure your Supabase credentials in app.js:</p>
+        <p>Please configure your Supabase credentials in .env or app.js:</p>
         <ol>
-            <li>Open app.js in a text editor</li>
-            <li>Update CONFIG.SUPABASE_URL with your project URL</li>
-            <li>Update CONFIG.SUPABASE_ANON_KEY with your anon key</li>
+            <li>Open .env (preferred) or app.js</li>
+            <li>Set SUPABASE_URL to your project URL</li>
+            <li>Set SUPABASE_ANON_KEY to your anon key</li>
             <li>Save the file and refresh this page</li>
         </ol>
         <p>You can get these values from your Supabase project settings.</p>
+        <p><strong>Library Status:</strong></p>
+        <ul>
+            <li>OpenPGP.js: ${typeof openpgp !== 'undefined' ? '✅ Loaded' : '❌ Not loaded'}</li>
+            <li>Supabase: ${supabaseClient || window.supabase ? '✅ Loaded' : '❌ Not loaded'}</li>
+        </ul>
+        <p><strong>Troubleshooting:</strong></p>
+        <ul>
+            <li>Check your internet connection</li>
+            <li>Make sure CDNs are accessible</li>
+            <li>Try refreshing the page</li>
+            <li>Check browser console for detailed errors</li>
+        </ul>
     `;
     document.body.innerHTML = '';
     document.body.appendChild(errorDiv);
@@ -237,12 +338,28 @@ function validatePGPKey(key) {
 
     key = key.trim();
 
-    if (!key.includes('-----BEGIN PGP')) {
-        throw new Error('Invalid PGP key format. Key must include PGP headers');
+    // More flexible PGP key validation
+    const pgpHeaders = [
+        '-----BEGIN PGP PUBLIC KEY BLOCK-----',
+        '-----BEGIN PGP PRIVATE KEY BLOCK-----',
+        '-----BEGIN PGP MESSAGE-----'
+    ];
+
+    const pgpFooters = [
+        '-----END PGP PUBLIC KEY BLOCK-----',
+        '-----END PGP PRIVATE KEY BLOCK-----',
+        '-----END PGP MESSAGE-----'
+    ];
+
+    const hasValidHeader = pgpHeaders.some(header => key.includes(header));
+    const hasValidFooter = pgpFooters.some(footer => key.includes(footer));
+
+    if (!hasValidHeader) {
+        throw new Error('Invalid PGP key format. Key must include PGP headers like "-----BEGIN PGP PUBLIC KEY BLOCK-----"');
     }
 
-    if (!key.includes('-----END PGP')) {
-        throw new Error('Invalid PGP key format. Key must include PGP footers');
+    if (!hasValidFooter) {
+        throw new Error('Invalid PGP key format. Key must include PGP footers like "-----END PGP PUBLIC KEY BLOCK-----"');
     }
 
     return key;
@@ -260,6 +377,102 @@ function sanitizeInput(input) {
     return div.innerHTML;
 }
 
+// Decrypt a private key with backwards-compatible API handling
+async function unlockPrivateKey(privateKeyObj, passphrase) {
+    if (!passphrase) {
+        return privateKeyObj;
+    }
+
+    if (typeof openpgp.decryptKey === 'function') {
+        return await openpgp.decryptKey({
+            privateKey: privateKeyObj,
+            passphrase
+        });
+    }
+
+    // Fallback for older OpenPGP APIs
+    if (typeof privateKeyObj.decrypt === 'function') {
+        await privateKeyObj.decrypt(passphrase);
+        return privateKeyObj;
+    }
+
+    throw new Error('Your OpenPGP version does not support passphrase decryption');
+}
+
+// Test PGP keys (for debugging)
+window.testPGPKeys = async function(publicKeyArmored, privateKeyArmored, passphrase = '') {
+    console.log('Testing PGP keys...');
+
+    try {
+        // Test public key
+        console.log('Testing public key...');
+        const publicKey = await openpgp.readKey({ armoredKey: publicKeyArmored });
+        console.log('✅ Public key is valid');
+        console.log('Key ID:', publicKey.getKeyID().hex);
+
+        // Test private key
+        console.log('Testing private key...');
+        const privateKey = await openpgp.readPrivateKey({ armoredKey: privateKeyArmored });
+        console.log('✅ Private key is valid');
+        console.log('Key ID:', privateKey.getKeyID().hex);
+
+        // Test decryption if passphrase provided
+        if (passphrase) {
+            console.log('Testing passphrase...');
+            try {
+                await unlockPrivateKey(privateKey, passphrase);
+                console.log('✅ Passphrase is correct');
+            } catch (error) {
+                console.error('❌ Passphrase is incorrect');
+                throw error;
+            }
+        }
+
+        // Test encryption/decryption
+        console.log('Testing encryption/decryption...');
+        const testMessage = 'Hello, World!';
+        const encrypted = await openpgp.encrypt({
+            message: await openpgp.createMessage({ text: testMessage }),
+            encryptionKeys: publicKey
+        });
+        console.log('✅ Encryption successful');
+
+        const { data: decrypted } = await openpgp.decrypt({
+            message: await openpgp.readMessage({ armoredMessage: encrypted }),
+            decryptionKeys: privateKey
+        });
+        console.log('✅ Decryption successful');
+        console.log('Original:', testMessage);
+        console.log('Decrypted:', decrypted);
+
+        if (testMessage === decrypted) {
+            console.log('✅ All tests passed!');
+            return true;
+        } else {
+            console.error('❌ Decryption mismatch');
+            return false;
+        }
+
+    } catch (error) {
+        console.error('❌ Test failed:', error);
+        return false;
+    }
+};
+
+// Make helper functions available globally for debugging
+window.debugApp = function() {
+    console.log('=== Application Debug Info ===');
+    console.log('OpenPGP loaded:', typeof openpgp !== 'undefined');
+    console.log('OpenPGP version:', openpgp?.version);
+    console.log('Supabase loaded:', !!supabaseClient || !!window.supabase);
+    console.log('Current user:', currentUser?.username || 'Not set');
+    console.log('Current recipient:', currentRecipient?.username || 'Not set');
+    console.log('Users loaded:', users.length);
+    console.log('Messages loaded:', messages.length);
+    console.log('Polling active:', pollingInterval !== null);
+    console.log('============================');
+};
+
 // Setup user identity
 async function setupUser() {
     if (isLoading) return;
@@ -270,35 +483,57 @@ async function setupUser() {
         const privateKey = privateKeyInput.value.trim();
         const passphrase = privateKeyPassphraseInput.value;
 
+        console.log('Starting setup process...');
+
         // Validate inputs
         const validatedUsername = validateUsername(username);
         const validatedPublicKey = validatePGPKey(publicKey);
         const validatedPrivateKey = validatePGPKey(privateKey);
 
+        console.log('Inputs validated successfully');
+
         setLoading(true, setupBtn);
+
+        // Check if OpenPGP is available
+        if (typeof openpgp === 'undefined') {
+            throw new Error('OpenPGP library not loaded. Please check your internet connection.');
+        }
+
+        console.log('OpenPGP version:', openpgp.version);
 
         // Validate keys with OpenPGP
         let publicKeyObj, privateKeyObj;
 
         try {
+            console.log('Reading public key...');
             publicKeyObj = await openpgp.readKey({ armoredKey: validatedPublicKey });
+            console.log('Public key read successfully');
         } catch (error) {
-            throw new Error('Invalid public key. Please check your PGP public key.');
+            console.error('Public key error:', error);
+            throw new Error('Invalid public key. Please check your PGP public key format.');
         }
 
         try {
+            console.log('Reading private key...');
             privateKeyObj = await openpgp.readPrivateKey({ armoredKey: validatedPrivateKey });
+            console.log('Private key read successfully');
         } catch (error) {
-            throw new Error('Invalid private key. Please check your PGP private key.');
+            console.error('Private key error:', error);
+            throw new Error('Invalid private key. Please check your PGP private key format.');
         }
 
         // Test private key decryption if passphrase provided
         if (passphrase) {
             try {
-                await privateKeyObj.decrypt(passphrase);
+                console.log('Testing private key decryption...');
+                await unlockPrivateKey(privateKeyObj, passphrase);
+                console.log('Private key decrypted successfully');
             } catch (error) {
+                console.error('Private key decryption error:', error);
                 throw new Error('Failed to decrypt private key. Please check your passphrase.');
             }
+        } else {
+            console.log('No passphrase provided, skipping decryption test');
         }
 
         // Create user object
@@ -308,6 +543,8 @@ async function setupUser() {
             privateKey: validatedPrivateKey,
             passphrase: passphrase || null
         };
+
+        console.log('User object created:', currentUser.username);
 
         // Save to localStorage
         saveUserToStorage();
@@ -329,6 +566,8 @@ async function setupUser() {
         privateKeyInput.value = '';
         privateKeyPassphraseInput.value = '';
 
+        console.log('Setup completed successfully');
+
     } catch (error) {
         console.error('Setup error:', error);
         showError(error.message || 'Failed to setup identity. Please try again.');
@@ -339,12 +578,12 @@ async function setupUser() {
 
 // Register user in Supabase
 async function registerUserInSupabase(username, publicKey) {
-    if (!supabase) {
+    if (!supabaseClient) {
         throw new Error('Supabase not initialized');
     }
 
     try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('users')
             .upsert({
                 username,
@@ -366,13 +605,13 @@ async function registerUserInSupabase(username, publicKey) {
 
 // Load users from Supabase
 async function loadUsers() {
-    if (!supabase) {
+    if (!supabaseClient) {
         console.error('Supabase not initialized');
         return;
     }
 
     try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('users')
             .select('*')
             .order('created_at', { ascending: false });
@@ -438,12 +677,12 @@ function selectUser(user) {
 
 // Load messages for current conversation
 async function loadMessages() {
-    if (!currentRecipient || !currentUser || !supabase) {
+    if (!currentRecipient || !currentUser || !supabaseClient) {
         return;
     }
 
     try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('messages')
             .select('*')
             .or(`and(sender.eq.${currentUser.username},recipient.eq.${currentRecipient.username}),and(sender.eq.${currentRecipient.username},recipient.eq.${currentUser.username})`)
@@ -549,7 +788,7 @@ async function sendMessage() {
         }
 
         // Send to Supabase
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('messages')
             .insert({
                 sender: currentUser.username,
@@ -619,20 +858,13 @@ async function decryptMessage(encryptedMessage) {
     }
 
     try {
-        const privateKey = await openpgp.readPrivateKey({ armoredKey: currentUser.privateKey });
+        const privateKeyObj = await openpgp.readPrivateKey({ armoredKey: currentUser.privateKey });
 
-        if (!privateKey) {
+        if (!privateKeyObj) {
             throw new Error('Failed to read private key');
         }
 
-        // Decrypt private key if passphrase is provided
-        if (currentUser.passphrase) {
-            try {
-                await privateKey.decrypt(currentUser.passphrase);
-            } catch (error) {
-                throw new Error('Failed to decrypt private key with passphrase');
-            }
-        }
+        const privateKey = await unlockPrivateKey(privateKeyObj, currentUser.passphrase);
 
         const message = await openpgp.readMessage({ armoredMessage: encryptedMessage });
 
@@ -683,7 +915,7 @@ async function addUser() {
         }
 
         // Add to Supabase
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('users')
             .upsert({
                 username: validatedUsername,
