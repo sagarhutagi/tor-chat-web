@@ -1,0 +1,15 @@
+# Tor Hidden Service Configuration for Encrypted Chat App
+# Copy this to /etc/tor/torrc or your Tor configuration directory
+
+# Hidden Service Configuration
+HiddenServiceDir /var/lib/tor/hidden_service/
+HiddenServicePort 80 127.0.0.1:8000
+
+# Optional: Run as a specific user (Linux)
+# User tor
+
+# Optional: Log file
+# Log notice file /var/log/tor/notices.log
+
+# Optional: Data directory
+# DataDirectory /var/lib/tor

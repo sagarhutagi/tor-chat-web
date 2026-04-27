@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Encrypted Chat</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Setup Section -->
+        <div id="setup-section" class="setup-section">
+            <h2>Setup Your Identity</h2>
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" placeholder="Enter your username">
+            </div>
+            <div class="form-group">
+                <label for="public-key">Your Public Key:</label>
+                <textarea id="public-key" rows="10" placeholder="Paste your PGP public key here"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="private-key">Your Private Key (stored locally only):</label>
+                <textarea id="private-key" rows="10" placeholder="Paste your PGP private key here"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="private-key-passphrase">Private Key Passphrase (if any):</label>
+                <input type="password" id="private-key-passphrase" placeholder="Enter passphrase if your key is protected">
+            </div>
+            <button id="setup-btn" class="btn btn-primary">Save Identity</button>
+        </div>
+
+        <!-- Main Chat Interface -->
+        <div id="chat-section" class="chat-section hidden">
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <h3>Users</h3>
+                    <button id="add-user-btn" class="btn btn-small">+ Add User</button>
+                </div>
+                <div id="user-list" class="user-list"></div>
+            </div>
+
+            <div class="chat-area">
+                <div class="chat-header">
+                    <h3 id="chat-recipient">Select a user to chat</h3>
+                </div>
+                <div id="messages" class="messages"></div>
+                <div class="message-input">
+                    <textarea id="message-input" rows="3" placeholder="Type your message..."></textarea>
+                    <button id="send-btn" class="btn btn-primary">Send</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add User Modal -->
+        <div id="add-user-modal" class="modal hidden">
+            <div class="modal-content">
+                <h3>Add User</h3>
+                <div class="form-group">
+                    <label for="new-username">Username:</label>
+                    <input type="text" id="new-username" placeholder="Enter username">
+                </div>
+                <div class="form-group">
+                    <label for="new-public-key">Public Key:</label>
+                    <textarea id="new-public-key" rows="10" placeholder="Paste their PGP public key"></textarea>
+                </div>
+                <div class="modal-buttons">
+                    <button id="cancel-add-user" class="btn btn-secondary">Cancel</button>
+                    <button id="save-user" class="btn btn-primary">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/openpgp@5.11.0/dist/openpgp.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+</body>
+</html>
